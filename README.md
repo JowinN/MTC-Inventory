@@ -32,7 +32,7 @@ MTC Inventory is a modern, elegant, and cross-platform inventory management appl
 
 1. **Clone the repository:**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/JowinN/MTC-Inventory.git
    cd mtc_inventory
    ```
 
