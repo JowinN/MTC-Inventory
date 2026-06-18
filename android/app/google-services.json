@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "461659639574",
+    "project_id": "church-inventory-12bb1",
+    "storage_bucket": "church-inventory-12bb1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:461659639574:android:52293dcd5c1139f6f94a37",
+        "android_client_info": {
+          "package_name": "com.church.inventory.church_inventory"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "461659639574-rvane49i1tf3bdt7vjuul4sk5trcs99r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.church.inventory.church_inventory",
+            "certificate_hash": "93f2098771c0db61be2242f9a11335824d23af10"
+          }
+        },
+        {
+          "client_id": "461659639574-ocpu70e858d2aue9s2g2l2rdbos8j8at.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCXdjL45zm9Dj7XraOnYzqSjI6XsvIbodc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "461659639574-ocpu70e858d2aue9s2g2l2rdbos8j8at.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
