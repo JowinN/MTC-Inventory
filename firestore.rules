@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Only allow authenticated users to read/write inventory items
+    match /inventory/{itemId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Only allow authenticated users to read/write audit history
+    match /audit_history/{auditId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Only allow authenticated users to read/write service history
+    match /service_history/{serviceId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
