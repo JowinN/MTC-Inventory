@@ -125,9 +125,11 @@ class _LoginScreenState extends State<LoginScreen> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 28),
+            Icon(Icons.error_outline, color: Colors.redAccent, size: 28),
             SizedBox(width: 8),
-            Text('Google Sign-In Issue', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Expanded(
+              child: Text('Login Failed', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            ),
           ],
         ),
         content: Column(
@@ -135,40 +137,31 @@ class _LoginScreenState extends State<LoginScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'A native Google API exception occurred. This is common when testing debug builds if the app\'s SHA-1 fingerprint has not been registered in the Firebase Console.',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              'We couldn\'t sign you in with Google. Please check your network connection and try again.',
+              style: TextStyle(color: Colors.white70, fontSize: 14),
             ),
             const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF0F172A),
-                borderRadius: BorderRadius.circular(8),
+            if (errorDetails.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0F172A),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  errorDetails,
+                  style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontFamily: 'monospace'),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              child: Text(
-                errorDetails,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 11, fontFamily: 'monospace'),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Would you like to bypass this using the Simulated Google Account Chooser for testing?',
-              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
-            ),
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
-          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _showGoogleAccountChooser();
-            },
-            child: const Text('Use Simulation', style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

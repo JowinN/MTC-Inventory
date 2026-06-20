@@ -28,7 +28,7 @@ class _AuditScreenState extends State<AuditScreen> {
 
   Future<void> _loadDueItems() async {
     final items = await _databaseService.getItems();
-    final due = items.where((i) => i.isAuditDue && i.status != 'In Service').toList();
+    final due = items.where((i) => i.isAuditDue && i.inServiceQuantity < i.quantity).toList();
     if (mounted) {
       setState(() {
         _dueItems = due;
@@ -168,7 +168,25 @@ class _AuditScreenState extends State<AuditScreen> {
           Navigator.pop(ctx); // close scanner sheet
           final item = await _databaseService.getItemById(code.trim());
           if (item != null) {
-            if (mounted) _showAuditFormDialog(item);
+            if (item.quantity > 1 && item.auditedQuantity + 1 < item.quantity) {
+              await _databaseService.incrementAuditedQuantity(item.id);
+              messenger.showSnackBar(
+                SnackBar(
+                  content: Text('Scanned ${item.auditedQuantity + 1} of ${item.quantity}. Keep scanning.'),
+                  backgroundColor: Colors.blueAccent,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            } else if (item.quantity > 1 && item.auditedQuantity >= item.quantity) {
+              messenger.showSnackBar(
+                const SnackBar(
+                  content: Text('All items for this QR code have already been audited!'),
+                  backgroundColor: Colors.orangeAccent,
+                ),
+              );
+            } else {
+              if (mounted) _showAuditFormDialog(item);
+            }
           } else {
             messenger.showSnackBar(
               SnackBar(
@@ -331,6 +349,14 @@ class _AuditScreenState extends State<AuditScreen> {
                                     'ID: ${item.id} • Last Audit: $lastAuditedStr',
                                     style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12),
                                   ),
+                                  if (item.quantity > 1)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Text(
+                                        'Audited: ${item.auditedQuantity} / ${item.quantity}',
+                                        style: const TextStyle(color: Colors.blueAccent, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

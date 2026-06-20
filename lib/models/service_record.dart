@@ -6,6 +6,7 @@ class ServiceRecord {
   final DateTime? actualReturnDate;
   final String issueDescription;
   final String resolutionNotes;
+  final int quantity;
 
   ServiceRecord({
     required this.id,
@@ -15,6 +16,7 @@ class ServiceRecord {
     this.actualReturnDate,
     required this.issueDescription,
     required this.resolutionNotes,
+    this.quantity = 1,
   });
 
   bool get isReturned {
@@ -34,6 +36,7 @@ class ServiceRecord {
       'actualReturnDate': actualReturnDate?.toIso8601String(),
       'issueDescription': issueDescription,
       'resolutionNotes': resolutionNotes,
+      'quantity': quantity,
     };
   }
 
@@ -52,6 +55,7 @@ class ServiceRecord {
           : null,
       issueDescription: map['issueDescription'] ?? '',
       resolutionNotes: map['resolutionNotes'] ?? '',
+      quantity: map['quantity'] ?? 1,
     );
   }
 }

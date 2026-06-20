@@ -8,16 +8,29 @@ import 'package:permission_handler/permission_handler.dart';
 /// Returns the full file path.
 Future<String> downloadQrCode(String id, Uint8List bytes) async {
   if (Platform.isAndroid) {
-    // 1. Request storage permission
-    PermissionStatus storageStatus = await Permission.storage.status;
-    if (!storageStatus.isGranted) {
-      storageStatus = await Permission.storage.request();
+    // 1. Request appropriate storage permission based on Android version
+    bool isGranted = false;
+    
+    // For Android 13+ (API 33+)
+    PermissionStatus photosStatus = await Permission.photos.status;
+    if (photosStatus.isGranted) {
+      isGranted = true;
+    } else {
+      photosStatus = await Permission.photos.request();
+      if (photosStatus.isGranted) {
+        isGranted = true;
+      }
+    }
+    
+    // Fallback for older Android versions
+    if (!isGranted) {
+      PermissionStatus storageStatus = await Permission.storage.status;
+      if (!storageStatus.isGranted) {
+        storageStatus = await Permission.storage.request();
+      }
+      isGranted = storageStatus.isGranted;
     }
 
-    bool isGranted = storageStatus.isGranted;
-
-    // If storage status is still not granted (or on Android 11+ where storage request is a no-op/denied),
-    // request manageExternalStorage.
     if (!isGranted) {
       PermissionStatus manageStatus = await Permission.manageExternalStorage.status;
       if (!manageStatus.isGranted) {

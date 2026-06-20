@@ -5,7 +5,8 @@ import '../models/item.dart';
 import '../utils/qr_downloader.dart';
 
 class AddItemScreen extends StatefulWidget {
-  const AddItemScreen({super.key});
+  final Item? itemToEdit;
+  const AddItemScreen({super.key, this.itemToEdit});
 
   @override
   State<AddItemScreen> createState() => _AddItemScreenState();
@@ -16,12 +17,42 @@ class _AddItemScreenState extends State<AddItemScreen> {
   final _databaseService = DatabaseService.instance;
 
   String _category = 'Audio'; // Audio or Video
-  final _nameController = TextEditingController();
-  final _brandController = TextEditingController();
-  final _modelController = TextEditingController();
-  final _serialController = TextEditingController();
+  late final TextEditingController _nameController;
+  late final TextEditingController _brandController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _serialController;
+  late final TextEditingController _quantityController;
 
   bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.itemToEdit != null) {
+      _category = widget.itemToEdit!.category;
+      _nameController = TextEditingController(text: widget.itemToEdit!.name);
+      _brandController = TextEditingController(text: widget.itemToEdit!.brand);
+      _modelController = TextEditingController(text: widget.itemToEdit!.model);
+      _serialController = TextEditingController(text: widget.itemToEdit!.serialNumber);
+      _quantityController = TextEditingController(text: widget.itemToEdit!.quantity.toString());
+    } else {
+      _nameController = TextEditingController();
+      _brandController = TextEditingController();
+      _modelController = TextEditingController();
+      _serialController = TextEditingController();
+      _quantityController = TextEditingController(text: '1');
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _brandController.dispose();
+    _modelController.dispose();
+    _serialController.dispose();
+    _quantityController.dispose();
+    super.dispose();
+  }
 
   void _submitForm() async {
     if (!_formKey.currentState!.validate()) return;
@@ -30,32 +61,57 @@ class _AddItemScreenState extends State<AddItemScreen> {
       _isSaving = true;
     });
 
-    // Generate unique ID based on category prefix + timestamp
-    final prefix = _category == 'Audio' ? 'AUD' : 'VID';
-    final randomId = '$prefix-${DateTime.now().millisecondsSinceEpoch % 1000000}';
-    final now = DateTime.now();
+    if (widget.itemToEdit != null) {
+      final updatedItem = widget.itemToEdit!.copyWith(
+        name: _nameController.text.trim(),
+        category: _category,
+        brand: _brandController.text.trim(),
+        model: _modelController.text.trim(),
+        serialNumber: _serialController.text.trim(),
+        quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
+      );
+      await _databaseService.updateItem(updatedItem);
+      
+      setState(() {
+        _isSaving = false;
+      });
+      
+      if (mounted) {
+        Navigator.pop(context);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Asset updated successfully!'), backgroundColor: Colors.green),
+        );
+      }
+    } else {
+      // Generate unique ID based on category prefix + timestamp
+      final prefix = _category == 'Audio' ? 'AUD' : 'VID';
+      final randomId = '$prefix-${DateTime.now().millisecondsSinceEpoch % 1000000}';
+      final now = DateTime.now();
 
-    final newItem = Item(
-      id: randomId,
-      name: _nameController.text.trim(),
-      category: _category,
-      brand: _brandController.text.trim(),
-      model: _modelController.text.trim(),
-      serialNumber: _serialController.text.trim(),
-      status: 'Available',
-      lastAudited: now,
-      nextAuditDue: now.add(const Duration(days: 30)),
-      addedDate: now,
-    );
+      final newItem = Item(
+        id: randomId,
+        name: _nameController.text.trim(),
+        category: _category,
+        brand: _brandController.text.trim(),
+        model: _modelController.text.trim(),
+        serialNumber: _serialController.text.trim(),
+        status: 'Available',
+        lastAudited: now,
+        nextAuditDue: now.add(const Duration(days: 30)),
+        addedDate: now,
+        quantity: int.tryParse(_quantityController.text.trim()) ?? 1,
+        auditedQuantity: 0,
+      );
 
-    await _databaseService.addItem(newItem);
+      await _databaseService.addItem(newItem);
 
-    setState(() {
-      _isSaving = false;
-    });
+      setState(() {
+        _isSaving = false;
+      });
 
-    if (mounted) {
-      _showSuccessDialog(newItem);
+      if (mounted) {
+        _showSuccessDialog(newItem);
+      }
     }
   }
 
@@ -177,7 +233,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         elevation: 0,
-        title: const Text('Add New Equipment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(widget.itemToEdit != null ? 'Edit Equipment' : 'Add New Equipment', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20.0),
@@ -304,6 +360,19 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   return null;
                 },
               ),
+              const SizedBox(height: 16),
+              
+              _buildTextField(
+                controller: _quantityController,
+                label: 'Quantity',
+                hint: 'e.g., 14',
+                keyboardType: TextInputType.number,
+                validator: (val) {
+                  if (val == null || val.trim().isEmpty) return 'Quantity is required';
+                  if (int.tryParse(val) == null || int.parse(val) < 1) return 'Must be a valid number >= 1';
+                  return null;
+                },
+              ),
               
               const SizedBox(height: 32),
               
@@ -320,9 +389,9 @@ class _AddItemScreenState extends State<AddItemScreen> {
                   ),
                   child: _isSaving
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Save Asset & Generate QR',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      : Text(
+                          widget.itemToEdit != null ? 'Update Asset' : 'Save Asset & Generate QR',
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                 ),
               ),
@@ -338,6 +407,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
     required String label,
     required String hint,
     required String? Function(String?)? validator,
+    TextInputType keyboardType = TextInputType.text,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,6 +417,7 @@ class _AddItemScreenState extends State<AddItemScreen> {
         TextFormField(
           controller: controller,
           validator: validator,
+          keyboardType: keyboardType,
           style: const TextStyle(color: Colors.white),
           decoration: InputDecoration(
             hintText: hint,

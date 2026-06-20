@@ -48,7 +48,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
   }
 
   List<Item> get _filteredItems {
-    return _items.where((item) {
+    final list = _items.where((item) {
       // Search matches
       final matchesSearch = item.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           item.brand.toLowerCase().contains(_searchQuery.toLowerCase()) ||
@@ -63,16 +63,20 @@ class _InventoryScreenState extends State<InventoryScreen> {
       bool matchesStatus = true;
       if (_selectedStatus != 'All') {
         if (_selectedStatus == 'Available') {
-          matchesStatus = item.status == 'Available';
+          matchesStatus = item.availableQty > 0;
         } else if (_selectedStatus == 'In Service') {
-          matchesStatus = item.status == 'In Service';
+          matchesStatus = item.inServiceQuantity > 0;
+        } else if (_selectedStatus == 'In Event') {
+          matchesStatus = item.outForEventQuantity > 0;
         } else if (_selectedStatus == 'Audit Due') {
-          matchesStatus = item.isAuditDue && item.status != 'In Service';
+          matchesStatus = item.isAuditDue && item.inServiceQuantity < item.quantity;
         }
       }
 
       return matchesSearch && matchesCategory && matchesStatus;
     }).toList();
+    list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return list;
   }
 
   @override
@@ -186,10 +190,11 @@ class _InventoryScreenState extends State<InventoryScreen> {
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: ['All', 'Available', 'In Service', 'Audit Due'].map((stat) {
+                          children: ['All', 'Available', 'In Service', 'In Event', 'Audit Due'].map((stat) {
                             final isSelected = _selectedStatus == stat;
                             Color activeColor = Colors.blueAccent;
                             if (stat == 'In Service') activeColor = Colors.amber;
+                            if (stat == 'In Event') activeColor = Colors.indigoAccent;
                             if (stat == 'Audit Due') activeColor = Colors.redAccent;
                             
                             return Padding(
@@ -244,12 +249,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
                     itemCount: filtered.length,
                     itemBuilder: (context, index) {
                       final item = filtered[index];
-                      return Container(
+                      return Card(
                         margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1E293B),
+                        color: const Color(0xFF1E293B),
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFF334155), width: 1),
+                          side: const BorderSide(color: Color(0xFF334155), width: 1),
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -288,7 +293,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                                     '${item.brand} ${item.model}',
                                     style: const TextStyle(color: Color(0xFF64748B), fontSize: 12),
                                   ),
-                                  if (item.isAuditDue && item.status != 'In Service') ...[
+                                  if (item.isAuditDue && item.inServiceQuantity < item.quantity) ...[
                                     const SizedBox(width: 8),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -309,7 +314,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildStatusBadge(item.status),
+                              _buildStatusBadge(item),
                               const SizedBox(width: 4),
                               const Icon(Icons.chevron_right, color: Color(0xFF475569)),
                             ],
@@ -324,10 +329,15 @@ class _InventoryScreenState extends State<InventoryScreen> {
     );
   }
 
-  Widget _buildStatusBadge(String status) {
+  Widget _buildStatusBadge(Item item) {
+    final status = item.computedStatus;
     Color color = Colors.green;
-    if (status == 'In Service') {
+    if (status.contains('Service') && status.contains('Event')) {
+      color = Colors.purpleAccent;
+    } else if (status.contains('Service')) {
       color = Colors.amber;
+    } else if (status.contains('Event')) {
+      color = Colors.indigoAccent;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

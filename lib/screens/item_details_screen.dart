@@ -6,6 +6,7 @@ import '../models/audit_record.dart';
 import '../models/service_record.dart';
 import '../services/auth_service.dart';
 import '../utils/qr_downloader.dart';
+import 'add_item_screen.dart';
 
 class ItemDetailsScreen extends StatefulWidget {
   final String itemId;
@@ -196,6 +197,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
   void _showSendToServiceDialog() {
     final formKey = GlobalKey<FormState>();
     final issueController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
     DateTime expectedDate = DateTime.now().add(const Duration(days: 7));
 
     showDialog(
@@ -231,6 +233,33 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                     return null;
                   },
                 ),
+                if (_item!.quantity > 1) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Quantity to Send (Max: ${_item!.quantity - _item!.inServiceQuantity})',
+                      labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Color(0xFF334155)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.blueAccent),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    validator: (val) {
+                      if (val == null || val.isEmpty) return 'Quantity is required';
+                      final q = int.tryParse(val);
+                      if (q == null || q < 1) return 'Must be >= 1';
+                      if (q > (_item!.quantity - _item!.inServiceQuantity)) return 'Cannot exceed available quantity';
+                      return null;
+                    },
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -274,6 +303,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                   widget.itemId,
                   issueController.text.trim(),
                   expectedDate,
+                  int.tryParse(quantityController.text.trim()) ?? 1,
                 );
                 if (context.mounted) {
                   Navigator.pop(ctx);
@@ -301,7 +331,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Return from Service', style: TextStyle(color: Colors.white)),
+        title: Text('Return from Service (Qty: ${record.quantity})', style: const TextStyle(color: Colors.white)),
         content: Form(
           key: formKey,
           child: TextFormField(
@@ -450,6 +480,19 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
           backgroundColor: const Color(0xFF1E293B),
           elevation: 0,
           title: Text(item.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.blueAccent),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => AddItemScreen(itemToEdit: item),
+                  ),
+                );
+              },
+            ),
+          ],
           bottom: const TabBar(
             labelColor: Colors.blueAccent,
             unselectedLabelColor: Color(0xFF94A3B8),
@@ -517,9 +560,25 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                               style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 8),
-                            _buildStatusBadge(item.status),
+                            _buildStatusBadge(item),
+                            if (item.quantity > 1 && item.inServiceQuantity > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  '${item.inServiceQuantity} / ${item.quantity} in Service',
+                                  style: const TextStyle(color: Colors.amber, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            if (item.quantity > 1 && item.outForEventQuantity > 0)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 8.0),
+                                child: Text(
+                                  '${item.outForEventQuantity} / ${item.quantity} in Event',
+                                  style: const TextStyle(color: Colors.indigoAccent, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
                             const SizedBox(height: 12),
-                            if (item.isAuditDue && item.status != 'In Service')
+                            if (item.isAuditDue && item.inServiceQuantity < item.quantity)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                 decoration: BoxDecoration(
@@ -555,12 +614,12 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
-                          onPressed: item.status == 'In Service' ? null : _showAuditDialog,
+                          onPressed: item.inServiceQuantity >= item.quantity ? null : _showAuditDialog,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: item.status == 'In Service'
+                        child: item.inServiceQuantity > 0
                             ? ElevatedButton.icon(
                                 icon: const Icon(Icons.assignment_turned_in, color: Colors.white),
                                 label: const Text('Return', style: TextStyle(color: Colors.white)),
@@ -597,6 +656,7 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                     {'Label': 'Brand', 'Value': item.brand},
                     {'Label': 'Model', 'Value': item.model},
                     {'Label': 'Serial Number', 'Value': item.serialNumber},
+                    {'Label': 'Quantity', 'Value': '${item.quantity}'},
                     {'Label': 'Added Date', 'Value': addedDateText},
                     {'Label': 'Last Audited', 'Value': lastAuditText},
                     {'Label': 'Next Audit Due', 'Value': nextAuditText},
@@ -728,6 +788,10 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
                             ),
                             const SizedBox(height: 10),
                             Text('Issue: ${serv.issueDescription}', style: const TextStyle(color: Colors.white, fontSize: 13)),
+                            if (serv.quantity > 1) ...[
+                              const SizedBox(height: 6),
+                              Text('Quantity in Service: ${serv.quantity}', style: const TextStyle(color: Colors.amber, fontSize: 12)),
+                            ],
                             const SizedBox(height: 6),
                             Text('Expected Return: $expStr', style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 12)),
                             if (serv.isReturned) ...[
@@ -746,10 +810,15 @@ class _ItemDetailsScreenState extends State<ItemDetailsScreen> {
     );
   }
 
-  Widget _buildStatusBadge(String status) {
+  Widget _buildStatusBadge(Item item) {
+    final status = item.computedStatus;
     Color color = Colors.green;
-    if (status == 'In Service') {
+    if (status.contains('Service') && status.contains('Event')) {
+      color = Colors.purpleAccent;
+    } else if (status.contains('Service')) {
       color = Colors.amber;
+    } else if (status.contains('Event')) {
+      color = Colors.indigoAccent;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

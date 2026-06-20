@@ -9,6 +9,10 @@ class Item {
   final DateTime lastAudited;
   final DateTime nextAuditDue;
   final DateTime addedDate;
+  final int quantity;
+  final int auditedQuantity;
+  final int inServiceQuantity;
+  final int outForEventQuantity;
 
   Item({
     required this.id,
@@ -21,10 +25,38 @@ class Item {
     required this.lastAudited,
     required this.nextAuditDue,
     required this.addedDate,
+    this.quantity = 1,
+    this.auditedQuantity = 0,
+    this.inServiceQuantity = 0,
+    this.outForEventQuantity = 0,
   });
 
   bool get isAuditDue {
     return DateTime.now().isAfter(nextAuditDue);
+  }
+
+  int get availableQty => (quantity - inServiceQuantity - outForEventQuantity).clamp(0, quantity);
+
+  String get computedStatus {
+    if (inServiceQuantity >= quantity) {
+      return 'In Service';
+    }
+    if (outForEventQuantity >= quantity) {
+      return 'In Event';
+    }
+    if (inServiceQuantity + outForEventQuantity >= quantity) {
+      return 'Service & Event';
+    }
+    if (inServiceQuantity > 0 && outForEventQuantity > 0) {
+      return 'Service & Event';
+    }
+    if (inServiceQuantity > 0) {
+      return 'Part. Service';
+    }
+    if (outForEventQuantity > 0) {
+      return 'Part. Event';
+    }
+    return 'Available';
   }
 
   Item copyWith({
@@ -37,6 +69,10 @@ class Item {
     DateTime? lastAudited,
     DateTime? nextAuditDue,
     DateTime? addedDate,
+    int? quantity,
+    int? auditedQuantity,
+    int? inServiceQuantity,
+    int? outForEventQuantity,
   }) {
     return Item(
       id: this.id,
@@ -49,6 +85,10 @@ class Item {
       lastAudited: lastAudited ?? this.lastAudited,
       nextAuditDue: nextAuditDue ?? this.nextAuditDue,
       addedDate: addedDate ?? this.addedDate,
+      quantity: quantity ?? this.quantity,
+      auditedQuantity: auditedQuantity ?? this.auditedQuantity,
+      inServiceQuantity: inServiceQuantity ?? this.inServiceQuantity,
+      outForEventQuantity: outForEventQuantity ?? this.outForEventQuantity,
     );
   }
 
@@ -64,6 +104,10 @@ class Item {
       'lastAudited': lastAudited.toIso8601String(),
       'nextAuditDue': nextAuditDue.toIso8601String(),
       'addedDate': addedDate.toIso8601String(),
+      'quantity': quantity,
+      'auditedQuantity': auditedQuantity,
+      'inServiceQuantity': inServiceQuantity,
+      'outForEventQuantity': outForEventQuantity,
     };
   }
 
@@ -85,6 +129,10 @@ class Item {
       addedDate: map['addedDate'] != null
           ? DateTime.parse(map['addedDate'])
           : DateTime.now(),
+      quantity: map['quantity'] ?? 1,
+      auditedQuantity: map['auditedQuantity'] ?? 0,
+      inServiceQuantity: map['inServiceQuantity'] ?? 0,
+      outForEventQuantity: map['outForEventQuantity'] ?? 0,
     );
   }
 }

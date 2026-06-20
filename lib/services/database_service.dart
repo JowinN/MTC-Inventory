@@ -2,6 +2,7 @@ import 'dart:async';
 import '../models/item.dart';
 import '../models/audit_record.dart';
 import '../models/service_record.dart';
+import '../models/event_record.dart';
 import '../firebase_config.dart';
 import 'firebase_database_service.dart';
 
@@ -9,9 +10,11 @@ abstract class DatabaseService {
   Future<List<Item>> getItems();
   Future<Item?> getItemById(String id);
   Future<void> addItem(Item item);
+  Future<void> updateItem(Item item);
   Future<void> updateItemStatus(String itemId, String newStatus);
   Future<void> auditItem(String itemId, String auditorEmail, String condition, String notes);
-  Future<void> sendToService(String itemId, String issueDescription, DateTime expectedReturnDate);
+  Future<void> incrementAuditedQuantity(String itemId);
+  Future<void> sendToService(String itemId, String issueDescription, DateTime expectedReturnDate, int quantity);
   Future<void> returnFromService(String itemId, String serviceRecordId, String resolutionNotes);
   Future<List<AuditRecord>> getAuditHistory(String itemId);
   Future<List<ServiceRecord>> getServiceHistory(String itemId);
@@ -20,6 +23,13 @@ abstract class DatabaseService {
   
   // Stream updates to listener screens
   Stream<List<Item>> get itemsStream;
+  Stream<List<EventRecord>> get eventsStream;
+
+  // Event methods
+  Future<void> createEvent(String eventName, DateTime date, List<EventItem> items);
+  Future<void> returnEventItem(String eventId, String itemId, int quantityToReturn);
+  Future<void> deleteEvent(String eventId);
+  Future<void> updateEvent(String eventId, String newEventName, DateTime newDate, List<EventItem> newItems);
 
   static DatabaseService? _instance;
   static DatabaseService get instance {
@@ -32,6 +42,9 @@ abstract class DatabaseService {
     }
     return _instance!;
   }
+  static set instance(DatabaseService service) {
+    _instance = service;
+  }
 }
 
 class MockDatabaseService implements DatabaseService {
@@ -42,21 +55,39 @@ class MockDatabaseService implements DatabaseService {
   final List<Item> _items = [];
   final List<AuditRecord> _auditHistory = [];
   final List<ServiceRecord> _serviceHistory = [];
+  final List<EventRecord> _events = [];
   
   final _itemsController = StreamController<List<Item>>.broadcast();
+  final _eventsController = StreamController<List<EventRecord>>.broadcast();
 
   MockDatabaseService._internal() {
     _populateInitialMockData();
   }
 
+  void reset() {
+    _items.clear();
+    _auditHistory.clear();
+    _serviceHistory.clear();
+    _events.clear();
+    _populateInitialMockData();
+    _triggerUpdate();
+  }
+
   @override
   Stream<List<Item>> get itemsStream async* {
-    yield _items;
+    yield List<Item>.from(_items);
     yield* _itemsController.stream;
+  }
+
+  @override
+  Stream<List<EventRecord>> get eventsStream async* {
+    yield List<EventRecord>.from(_events);
+    yield* _eventsController.stream;
   }
 
   void _triggerUpdate() {
     _itemsController.add(List<Item>.from(_items));
+    _eventsController.add(List<EventRecord>.from(_events));
   }
 
   void _populateInitialMockData() {
@@ -260,10 +291,30 @@ class MockDatabaseService implements DatabaseService {
   }
 
   @override
+  Future<void> updateItem(Item item) async {
+    int index = _items.indexWhere((i) => i.id == item.id);
+    if (index != -1) {
+      _items[index] = item;
+      _triggerUpdate();
+    }
+  }
+
+  @override
   Future<void> updateItemStatus(String itemId, String newStatus) async {
     int index = _items.indexWhere((item) => item.id == itemId);
     if (index != -1) {
       _items[index] = _items[index].copyWith(status: newStatus);
+      _triggerUpdate();
+    }
+  }
+
+  @override
+  Future<void> incrementAuditedQuantity(String itemId) async {
+    int index = _items.indexWhere((item) => item.id == itemId);
+    if (index != -1) {
+      _items[index] = _items[index].copyWith(
+        auditedQuantity: _items[index].auditedQuantity + 1,
+      );
       _triggerUpdate();
     }
   }
@@ -276,6 +327,7 @@ class MockDatabaseService implements DatabaseService {
       _items[index] = _items[index].copyWith(
         lastAudited: now,
         nextAuditDue: now.add(const Duration(days: 30)),
+        auditedQuantity: 0,
         status: condition == "Requires Repair" ? "Available" : _items[index].status, // Keep status but log it
       );
       
@@ -293,10 +345,14 @@ class MockDatabaseService implements DatabaseService {
   }
 
   @override
-  Future<void> sendToService(String itemId, String issueDescription, DateTime expectedReturnDate) async {
+  Future<void> sendToService(String itemId, String issueDescription, DateTime expectedReturnDate, int quantity) async {
     int index = _items.indexWhere((item) => item.id == itemId);
     if (index != -1) {
-      _items[index] = _items[index].copyWith(status: "In Service");
+      final newInServiceQuantity = _items[index].inServiceQuantity + quantity;
+      _items[index] = _items[index].copyWith(
+        inServiceQuantity: newInServiceQuantity,
+        status: newInServiceQuantity >= _items[index].quantity ? "In Service" : _items[index].status,
+      );
       
       _serviceHistory.add(ServiceRecord(
         id: "SERV-${DateTime.now().millisecondsSinceEpoch}",
@@ -305,6 +361,7 @@ class MockDatabaseService implements DatabaseService {
         expectedReturnDate: expectedReturnDate,
         issueDescription: issueDescription,
         resolutionNotes: "",
+        quantity: quantity,
       ));
       
       _triggerUpdate();
@@ -316,12 +373,10 @@ class MockDatabaseService implements DatabaseService {
     int itemIdx = _items.indexWhere((item) => item.id == itemId);
     int recordIdx = _serviceHistory.indexWhere((rec) => rec.id == serviceRecordId);
     
-    if (itemIdx != -1) {
-      _items[itemIdx] = _items[itemIdx].copyWith(status: "Available");
-    }
-    
+    int returnedQuantity = 0;
     if (recordIdx != -1) {
       final rec = _serviceHistory[recordIdx];
+      returnedQuantity = rec.quantity;
       _serviceHistory[recordIdx] = ServiceRecord(
         id: rec.id,
         itemId: rec.itemId,
@@ -330,6 +385,15 @@ class MockDatabaseService implements DatabaseService {
         actualReturnDate: DateTime.now(),
         issueDescription: rec.issueDescription,
         resolutionNotes: resolutionNotes,
+        quantity: rec.quantity,
+      );
+    }
+
+    if (itemIdx != -1) {
+      final newInServiceQuantity = (_items[itemIdx].inServiceQuantity - returnedQuantity).clamp(0, _items[itemIdx].quantity);
+      _items[itemIdx] = _items[itemIdx].copyWith(
+        inServiceQuantity: newInServiceQuantity,
+        status: "Available",
       );
     }
     _triggerUpdate();
@@ -355,6 +419,122 @@ class MockDatabaseService implements DatabaseService {
   @override
   Future<void> deleteItem(String itemId) async {
     _items.removeWhere((item) => item.id == itemId);
+    _auditHistory.removeWhere((rec) => rec.itemId == itemId);
+    _serviceHistory.removeWhere((rec) => rec.itemId == itemId);
+    _triggerUpdate();
+  }
+
+  @override
+  Future<void> createEvent(String eventName, DateTime date, List<EventItem> items) async {
+    final event = EventRecord(
+      id: "EVT-${DateTime.now().millisecondsSinceEpoch}",
+      eventName: eventName,
+      eventDate: date,
+      items: items,
+    );
+    _events.add(event);
+
+    for (var evItem in items) {
+      int index = _items.indexWhere((i) => i.id == evItem.itemId);
+      if (index != -1) {
+        final newOutQty = _items[index].outForEventQuantity + evItem.quantityTaken;
+        _items[index] = _items[index].copyWith(outForEventQuantity: newOutQty);
+      }
+    }
+    _triggerUpdate();
+  }
+
+  @override
+  Future<void> returnEventItem(String eventId, String itemId, int quantityToReturn) async {
+    int evtIndex = _events.indexWhere((e) => e.id == eventId);
+    if (evtIndex != -1) {
+      final evt = _events[evtIndex];
+      final newItems = evt.items.map((i) {
+        if (i.itemId == itemId) {
+          final newRetQty = (i.quantityReturned + quantityToReturn).clamp(0, i.quantityTaken);
+          return EventItem(
+            itemId: i.itemId,
+            quantityTaken: i.quantityTaken,
+            quantityReturned: newRetQty,
+          );
+        }
+        return i;
+      }).toList();
+      _events[evtIndex] = EventRecord(
+        id: evt.id,
+        eventName: evt.eventName,
+        eventDate: evt.eventDate,
+        items: newItems,
+      );
+    }
+
+    int itemIdx = _items.indexWhere((i) => i.id == itemId);
+    if (itemIdx != -1) {
+      final newOutQty = (_items[itemIdx].outForEventQuantity - quantityToReturn).clamp(0, _items[itemIdx].quantity);
+      _items[itemIdx] = _items[itemIdx].copyWith(outForEventQuantity: newOutQty);
+    }
+    _triggerUpdate();
+  }
+
+  @override
+  Future<void> deleteEvent(String eventId) async {
+    _events.removeWhere((e) => e.id == eventId);
+    _triggerUpdate();
+  }
+
+  @override
+  Future<void> updateEvent(String eventId, String newEventName, DateTime newDate, List<EventItem> newItems) async {
+    final eventIndex = _events.indexWhere((e) => e.id == eventId);
+    if (eventIndex == -1) {
+      throw Exception('Event not found');
+    }
+    
+    final oldEvent = _events[eventIndex];
+    final oldItemsMap = {for (var item in oldEvent.items) item.itemId: item};
+    final newItemsMap = {for (var item in newItems) item.itemId: item};
+
+    final allItemIds = {...oldItemsMap.keys, ...newItemsMap.keys};
+    for (var itemId in allItemIds) {
+      final oldItem = oldItemsMap[itemId];
+      final newItem = newItemsMap[itemId];
+      
+      int change = 0;
+      int quantityReturned = 0;
+
+      if (oldItem == null && newItem != null) {
+        change = newItem.quantityTaken;
+      } else if (oldItem != null && newItem == null) {
+        change = -(oldItem.quantityTaken - oldItem.quantityReturned);
+      } else if (oldItem != null && newItem != null) {
+        change = newItem.quantityTaken - oldItem.quantityTaken;
+        quantityReturned = oldItem.quantityReturned;
+        
+        final index = newItems.indexWhere((i) => i.itemId == itemId);
+        if (index != -1) {
+          newItems[index] = EventItem(
+            itemId: itemId,
+            quantityTaken: newItem.quantityTaken,
+            quantityReturned: quantityReturned,
+          );
+        }
+      }
+
+      if (change != 0) {
+        int itemIndex = _items.indexWhere((i) => i.id == itemId);
+        if (itemIndex != -1) {
+          final newOutQty = (_items[itemIndex].outForEventQuantity + change).clamp(0, _items[itemIndex].quantity);
+          _items[itemIndex] = _items[itemIndex].copyWith(outForEventQuantity: newOutQty);
+        }
+      }
+    }
+
+    _events[eventIndex] = EventRecord(
+      id: eventId,
+      eventName: newEventName,
+      eventDate: newDate,
+      items: newItems,
+    );
+
     _triggerUpdate();
   }
 }

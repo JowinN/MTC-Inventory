@@ -35,11 +35,12 @@ class _ServiceScreenState extends State<ServiceScreen> {
   }
 
   List<Item> get _itemsInService =>
-      _items.where((i) => i.status == 'In Service').toList();
+      _items.where((i) => i.inServiceQuantity > 0).toList();
 
   void _showSendToServiceForm(Item item) {
     final formKey = GlobalKey<FormState>();
     final issueController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
     DateTime expectedDate = DateTime.now().add(const Duration(days: 7));
 
     showDialog(
@@ -83,6 +84,35 @@ class _ServiceScreenState extends State<ServiceScreen> {
                     return null;
                   },
                 ),
+                if (item.quantity > 1) ...[
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: quantityController,
+                    style: const TextStyle(color: Colors.white),
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: 'Quantity to Send (Max: ${item.quantity - item.inServiceQuantity})',
+                      labelStyle: const TextStyle(color: Color(0xFF94A3B8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Color(0xFF334155)),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderSide: const BorderSide(color: Colors.blueAccent),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    validator: (val) {
+                      if (val == null || val.isEmpty) return 'Quantity is required';
+                      final q = int.tryParse(val);
+                      if (q == null || q < 1) return 'Must be >= 1';
+                      if (q > (item.quantity - item.inServiceQuantity)) {
+                        return 'Cannot exceed available quantity';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -135,6 +165,7 @@ class _ServiceScreenState extends State<ServiceScreen> {
                     item.id,
                     issueController.text.trim(),
                     expectedDate,
+                    int.tryParse(quantityController.text.trim()) ?? 1,
                   );
                   await NotificationService().scheduleServiceReturnNotification(
                     itemId: item.id,
@@ -300,16 +331,16 @@ class _ServiceScreenState extends State<ServiceScreen> {
             return;
           }
           if (mode == 'send') {
-            if (item.status != 'Available') {
+            if (item.availableQty <= 0) {
               messenger.showSnackBar(SnackBar(
-                content: Text('${item.name} is not available (status: ${item.status})'),
+                content: Text('${item.name} is not available (all units checked out).'),
                 backgroundColor: Colors.orange,
               ));
               return;
             }
             if (mounted) _showSendToServiceForm(item);
           } else {
-            if (item.status != 'In Service') {
+            if (item.inServiceQuantity <= 0) {
               messenger.showSnackBar(SnackBar(
                 content: Text('${item.name} is not currently in service.'),
                 backgroundColor: Colors.orange,
@@ -523,6 +554,14 @@ class _ServiceScreenState extends State<ServiceScreen> {
                                         color: Color(0xFF94A3B8),
                                         fontSize: 12),
                                   ),
+                                  if (item.quantity > 1)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4.0),
+                                      child: Text(
+                                        'In Service: ${item.inServiceQuantity} / ${item.quantity}',
+                                        style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

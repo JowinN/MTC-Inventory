@@ -11,6 +11,7 @@ import 'add_item_screen.dart';
 import 'audit_screen.dart';
 import 'service_screen.dart';
 import 'item_details_screen.dart';
+import 'events_list_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -372,8 +373,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final totalItems = _items.length;
     final audioItems = _items.where((i) => i.category == 'Audio').length;
     final videoItems = _items.where((i) => i.category == 'Video').length;
-    final itemsInService = _items.where((i) => i.status == 'In Service').length;
-    final overdueAudits = _items.where((i) => i.isAuditDue && i.status != 'In Service').length;
+    final itemsInService = _items.where((i) => i.inServiceQuantity > 0).length;
+    final overdueAudits = _items.where((i) => i.isAuditDue && i.inServiceQuantity < i.quantity).length;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A), // Slate 900
@@ -615,6 +616,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildActionButton(
+                    label: 'External Events',
+                    icon: Icons.event,
+                    color: const Color(0xFF334155),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const EventsListScreen()),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(child: const SizedBox.shrink()),
+              ],
+            ),
             
             const SizedBox(height: 28),
             
@@ -690,7 +710,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ],
                             ),
                           ),
-                          _buildStatusBadge(item.status),
+                          _buildStatusBadge(item),
                         ],
                       ),
                     ),
@@ -824,10 +844,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildStatusBadge(String status) {
+  Widget _buildStatusBadge(Item item) {
+    final status = item.computedStatus;
     Color color = Colors.green;
-    if (status == 'In Service') {
+    if (status.contains('Service') && status.contains('Event')) {
+      color = Colors.purpleAccent;
+    } else if (status.contains('Service')) {
       color = Colors.amber;
+    } else if (status.contains('Event')) {
+      color = Colors.indigoAccent;
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
